@@ -15,6 +15,7 @@ SEARCHES_TO_ALERT_ON = {
 }.freeze
 
 def init
+  puts "[#{Time.now}] - Start"
   `mkdir -p #{ROOT_DB_FOLDER}`
   raise "FATAL: can't init database" unless $?.success?
 
@@ -86,3 +87,5 @@ init
 SEARCHES_TO_ALERT_ON.each do |search, price|
   check_all(search, price)
 end
+
+puts "[#{Time.now}] - End"
