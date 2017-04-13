@@ -1,0 +1,88 @@
+#!/usr/bin/env ruby
+require 'json'
+require 'mail'
+
+BASE_URL = ENV["BASE_URL"].freeze
+GMAIL_USERNAME = ENV["GMAIL_USERNAME"]
+GMAIL_PASSWORD = ENV["GMAIL_PASSWORD"]
+RECIPIENT = ENV["RECIPIENT"]
+SENDER = ENV["SENDER"]
+ROOT_DB_FOLDER = ENV["DB_FOLDER"].freeze
+
+SEARCHES_TO_ALERT_ON = {
+  "counter depth french door stainless" => 2000.0,
+  "double oven electric range stainless" => 1500.0
+}.freeze
+
+def init
+  `mkdir -p #{ROOT_DB_FOLDER}`
+  raise "FATAL: can't init database" unless $?.success?
+
+  Mail.defaults do
+    delivery_method :smtp, mailer_options
+  end
+end
+
+def mailer_options
+  @_mailer_options ||= {
+    address: "smtp.gmail.com",
+    port: 587,
+    user_name: GMAIL_USERNAME,
+    password: GMAIL_PASSWORD,
+    authentication: 'plain',
+    enable_starttls_auto: true
+  }
+end
+
+def alert(item)
+  file = "#{ROOT_DB_FOLDER}/#{item['sku']}"
+  if File.exist?(file)
+    last_alerted_price = `cat #{file}`.strip.to_f
+    return if last_alerted_price <= item['last_price'].to_f
+  end
+
+  send_alert(item)
+
+  `echo #{item['last_price']} > #{file}`
+end
+
+def send_alert(item)
+  Mail.deliver do
+    to RECIPIENT
+    from SENDER
+    subject 'New Appliance price alert'
+    html_part do
+      content_type 'text/html; charset=UTF-8'
+      body "<a href='#{BASE_URL}#{item['link']}'>#{item['brand']} #{item['category']} #{item['sku']}</a> is at #{item['last_price']}"
+    end
+  end
+end
+
+def check_for_alerts(items, price)
+  items.each do |item|
+    alert(item) if item['last_price'] && !item['last_price'].empty? && item['last_price'].to_f < price
+  end
+end
+
+def parse_to_json(request, page)
+  command = "curl -sS -H 'Accept: application/json; Content-Type:application/x-www-form-urlencoded; charset=UTF-8' '#{BASE_URL}/search/' -X POST -d 'q=#{request}&page=#{page}'"
+  JSON.parse(`#{command}`)
+end
+
+def check_all(search, price)
+  page = 0
+  total_pages = 1
+
+  while total_pages > page
+    page += 1
+    response = parse_to_json(search, page)
+    total_pages = response['total_pages']
+    check_for_alerts(response['items'], price)
+  end
+end
+
+init
+
+SEARCHES_TO_ALERT_ON.each do |search, price|
+  check_all(search, price)
+end
