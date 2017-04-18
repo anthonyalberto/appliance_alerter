@@ -36,7 +36,7 @@ def mailer_options
 end
 
 def alert(item)
-  file = sanitize_filename("#{ROOT_DB_FOLDER}/#{item['sku']}")
+  file = "#{ROOT_DB_FOLDER}/#{sanitize_filename(item['sku'])}"
   if File.exist?(file)
     last_alerted_price = `cat #{file}`.strip.to_f
     return if last_alerted_price <= item['last_price'].to_f
